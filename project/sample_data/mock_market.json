@@ -1,0 +1,52 @@
+{
+  "_comment": "このファイルはAPI未接続時に使用するサンプルデータです。実際のAPIに差し替える際はservices/market_data.pyを編集してください。",
+  "market": {
+    "nikkei": 38250.0,
+    "nikkei_change_pct": -0.85,
+    "topix": 2710.5,
+    "topix_change_pct": -0.62,
+    "tse_growth": 780.2,
+    "tse_growth_change_pct": -1.45,
+    "usdjpy": 151.85,
+    "usdjpy_change": 0.65,
+    "sp500": 5105.0,
+    "sp500_change_pct": -0.32,
+    "nasdaq": 15980.0,
+    "nasdaq_change_pct": -0.75,
+    "sox": 4820.0,
+    "sox_change_pct": -1.20,
+    "us_2y_yield": 4.95,
+    "us_10y_yield": 4.62,
+    "jp_10y_yield": 1.05,
+    "wti_crude": 84.5,
+    "wti_change_pct": 1.85,
+    "gold": 2320.0,
+    "gold_change_pct": 0.45,
+    "vix": 18.5,
+    "turnover_trillion_yen": 3.8,
+    "advance_decline_ratio": 95.0
+  },
+  "events": [
+    {
+      "name": "米FOMC議事録公開",
+      "description": "前回FOMC会合の議事録が公開される。利下げ時期に関する議論内容が注目される。",
+      "expected_impact": "タカ派的な内容なら米金利上昇→円安進行→輸出株に追い風、グロース株に逆風",
+      "time_jst": "03:00",
+      "importance": "高"
+    },
+    {
+      "name": "日本3月消費者物価指数（CPI）",
+      "description": "日本のインフレ動向を確認する重要指標。日銀の追加利上げ判断に影響する。",
+      "expected_impact": "予想を上回る場合、日銀利上げ観測強化→円高・金利上昇リスク",
+      "time_jst": "08:30",
+      "importance": "高"
+    },
+    {
+      "name": "東京エレクトロン決算発表",
+      "description": "半導体製造装置大手の決算。AI投資サイクルの現状を把握するうえで重要。",
+      "expected_impact": "好調なら半導体関連株全体に波及。ガイダンス次第で相場全体に影響",
+      "time_jst": "15:30",
+      "importance": "中"
+    }
+  ]
+}
