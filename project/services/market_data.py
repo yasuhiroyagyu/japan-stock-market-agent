@@ -2,30 +2,31 @@
 services/market_data.py
 市場データ取得サービス
 
-【データソースの切り替え方】
-- DATA_MODE="mock" の場合: sample_data/mock_market.json からデータを読み込む
-- DATA_MODE="live" の場合: yfinance や各種APIからリアルデータを取得する
+【データモードの切り替え】
+- DATA_MODE="mock" : sample_data/mock_market.json からデータを読み込む（デフォルト）
+- DATA_MODE="live" : yfinance を使ってリアルデータを取得する
 
-【実際のAPIに差し替えるには】
-1. yfinanceを使う場合（無料）:
-   - pip install yfinance
-   - fetch_live_data() 関数のコメントを参照
+【実行例】
+  python3 main.py               # モックデータ
+  DATA_MODE=live python3 main.py  # 実データ
 
-2. Alpha Vantage を使う場合:
-   - config.py の ALPHA_VANTAGE_KEY に APIキーを設定
-   - 各関数の TODO コメントを参照
+【データソース (live モード)】
+  yfinance 経由で Yahoo Finance から取得（無料・APIキー不要）
+  取得対象: 日経平均, TOPIX, S&P500, NASDAQ, VIX, USD/JPY, Gold, WTI原油
 
-3. その他のデータソース:
-   - Bloomberg API (有料)
-   - Refinitiv / LSEG (有料)
-   - J-Quants API（日本株専門、一部無料）
-     https://jpx-jquants.com/
+【未対応 → mock フォールバック】
+  - SOX (^SOX)       : TODO コメント参照
+  - 米2年金利 (^IRX) : TODO コメント参照
+  - 米10年金利 (^TNX): TODO コメント参照
+  - 日本10年金利      : TODO コメント参照
+  - 東証グロース指数  : yfinance では安定取得が困難
 """
 
 import json
 import sys
 import os
 from datetime import datetime
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -33,10 +34,14 @@ from models.types import MarketData
 from config import DATA_MODE, MOCK_DATA_PATH
 
 
+# ============================================================
+# パブリック API
+# ============================================================
+
 def fetch_market_data() -> MarketData:
     """
-    市場データを取得するメイン関数
-    DATA_MODE に応じてモック/実データを切り替えます
+    市場データを取得するメイン関数。
+    DATA_MODE に応じてモック / 実データを切り替えます。
     """
     if DATA_MODE == "live":
         return fetch_live_data()
@@ -44,10 +49,14 @@ def fetch_market_data() -> MarketData:
         return fetch_mock_data()
 
 
+# ============================================================
+# モックデータ取得
+# ============================================================
+
 def fetch_mock_data() -> MarketData:
     """
-    サンプルデータファイルから市場データを読み込む
-    APIキーなしで動作確認できます
+    sample_data/mock_market.json からサンプルデータを読み込む。
+    APIキー不要で即動作確認できます。
     """
     with open(MOCK_DATA_PATH, "r", encoding="utf-8") as f:
         raw = json.load(f)
@@ -81,75 +90,206 @@ def fetch_mock_data() -> MarketData:
     )
 
 
+# ============================================================
+# 実データ取得（yfinance）
+# ============================================================
+
 def fetch_live_data() -> MarketData:
     """
-    実際のAPIからリアルタイム市場データを取得する
-    【使い方】 DATA_MODE=live python main.py
+    yfinance を使って Yahoo Finance からリアルタイムデータを取得する。
+    各銘柄を1件ずつ安全に取得し、失敗した場合は None を返す。
 
-    TODO: yfinanceを使う場合は以下のコメントを解除してください
-    pip install yfinance が必要です
+    取得成功: yfinance の実データを使用
+    取得失敗: モックデータの対応値にフォールバック
     """
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("[エラー] yfinance がインストールされていません。")
+        print("  pip install yfinance pandas を実行してください。")
+        print("[情報] モックデータにフォールバックします。")
+        return fetch_mock_data()
 
-    # ===== yfinance 版（無料・推奨） =====
-    # TODO: 以下のコメントを解除して yfinance を有効化してください
+    print("[live] yfinance でリアルデータを取得中...")
 
-    # try:
-    #     import yfinance as yf
-    #     from datetime import timedelta
-    #
-    #     def _get_change_pct(ticker_sym: str) -> tuple[float, float]:
-    #         """終値と前日比(%)を取得"""
-    #         t = yf.Ticker(ticker_sym)
-    #         hist = t.history(period="2d")
-    #         if len(hist) < 2:
-    #             return 0.0, 0.0
-    #         close_today = hist["Close"].iloc[-1]
-    #         close_prev = hist["Close"].iloc[-2]
-    #         change_pct = (close_today - close_prev) / close_prev * 100
-    #         return float(close_today), float(change_pct)
-    #
-    #     def _get_yield(ticker_sym: str) -> float:
-    #         """金利データを取得（^TNX など）"""
-    #         t = yf.Ticker(ticker_sym)
-    #         hist = t.history(period="1d")
-    #         if hist.empty:
-    #             return 0.0
-    #         return float(hist["Close"].iloc[-1])
-    #
-    #     nikkei, nikkei_chg = _get_change_pct("^N225")
-    #     topix, topix_chg = _get_change_pct("^TPX")
-    #     usdjpy, _ = _get_change_pct("JPY=X")
-    #     usdjpy_prev_close = usdjpy / (1 + _ / 100) if _ != 0 else usdjpy
-    #     usdjpy_change = usdjpy - usdjpy_prev_close
-    #     sp500, sp500_chg = _get_change_pct("^GSPC")
-    #     nasdaq, nasdaq_chg = _get_change_pct("^IXIC")
-    #     sox, sox_chg = _get_change_pct("^SOX")
-    #     wti, wti_chg = _get_change_pct("CL=F")
-    #     gold, gold_chg = _get_change_pct("GC=F")
-    #     vix, _ = _get_change_pct("^VIX")
-    #     us_10y = _get_yield("^TNX")
-    #     us_2y = _get_yield("^IRX")
-    #     jp_10y = _get_yield("^JGB10Y")  # 利用可能な場合
-    #
-    #     return MarketData(
-    #         nikkei=nikkei, nikkei_change_pct=nikkei_chg,
-    #         topix=topix, topix_change_pct=topix_chg,
-    #         tse_growth=0.0, tse_growth_change_pct=0.0,  # yfinanceで取得困難
-    #         usdjpy=usdjpy, usdjpy_change=usdjpy_change,
-    #         sp500=sp500, sp500_change_pct=sp500_chg,
-    #         nasdaq=nasdaq, nasdaq_change_pct=nasdaq_chg,
-    #         sox=sox, sox_change_pct=sox_chg,
-    #         us_2y_yield=us_2y, us_10y_yield=us_10y, jp_10y_yield=jp_10y,
-    #         wti_crude=wti, wti_change_pct=wti_chg,
-    #         gold=gold, gold_change_pct=gold_chg,
-    #         vix=vix,
-    #     )
-    # except Exception as e:
-    #     print(f"[警告] ライブデータ取得に失敗しました: {e}")
-    #     print("[情報] サンプルデータにフォールバックします")
-    #     return fetch_mock_data()
+    # モックデータを fallback 用に先に読み込んでおく
+    mock = fetch_mock_data()
 
-    # ===== 現在はフォールバックとしてモックデータを使用 =====
-    print("[警告] live モードが選択されましたが、yfinanceが未設定です。モックデータを使用します。")
-    print("[情報] services/market_data.py の TODO コメントを確認してください。")
-    return fetch_mock_data()
+    # ---- 各銘柄を1件ずつ安全に取得 ----
+
+    nikkei_r      = _fetch_ticker("^N225",  label="日経平均")
+    # TOPIX 直接シンボル (^TPX / ^TOPX) は yfinance で取得不可のため、
+    # TOPIX 連動型 ETF (1306.T) で騰落率を近似する。
+    topix_r       = _fetch_ticker("1306.T", label="TOPIX(1306.T近似)")
+    sp500_r       = _fetch_ticker("^GSPC",  label="S&P500")
+    nasdaq_r      = _fetch_ticker("^IXIC",  label="NASDAQ")
+    vix_r         = _fetch_ticker("^VIX",   label="VIX")
+    usdjpy_r      = _fetch_ticker("JPY=X",  label="USD/JPY")
+    gold_r        = _fetch_ticker("GC=F",   label="Gold")
+    wti_r         = _fetch_ticker("CL=F",   label="WTI原油")
+
+    # ---- TODO: 以下は yfinance での安定取得が困難なため mock フォールバック ----
+
+    # TODO: SOX (フィラデルフィア半導体指数)
+    #   シンボル ^SOX は yfinance で取得できない場合がある。
+    #   代替: SOXX (iShares 半導体 ETF) で近似する方法もある。
+    #   sox_r = _fetch_ticker("^SOX", label="SOX")
+    sox_price      = mock.sox
+    sox_change_pct = mock.sox_change_pct
+
+    # TODO: 米2年金利 (^IRX は13週Tビル利回り ≒ 2年金利の近似)
+    #   より正確な取得には FRED API や Bloomberg が必要。
+    #   us2y_r = _fetch_ticker("^IRX", label="米2年金利")
+    us_2y_yield = mock.us_2y_yield
+
+    # TODO: 米10年金利 (^TNX)
+    #   yfinance で ^TNX を取得できる場合もあるが不安定。
+    #   us10y_r = _fetch_ticker("^TNX", label="米10年金利")
+    us_10y_yield = mock.us_10y_yield
+
+    # TODO: 日本10年金利
+    #   yfinance に安定したシンボルがない。
+    #   J-Quants API または日本銀行 API の利用を推奨。
+    #   https://jpx-jquants.com/
+    jp_10y_yield = mock.jp_10y_yield
+
+    # TODO: 東証グロース指数
+    #   yfinance での取得が不安定なため mock を使用。
+    tse_growth            = mock.tse_growth
+    tse_growth_change_pct = mock.tse_growth_change_pct
+
+    # ---- 実データ / fallback を組み合わせて MarketData を構築 ----
+
+    # USD/JPY は「変化率」ではなく「変化幅（円）」で持つ
+    usdjpy_price  = _price(usdjpy_r, mock.usdjpy)
+    usdjpy_prev   = _prev_close(usdjpy_r, mock.usdjpy)
+    usdjpy_change = round(usdjpy_price - usdjpy_prev, 4)
+
+    return MarketData(
+        # 日本株
+        nikkei=_price(nikkei_r, mock.nikkei),
+        nikkei_change_pct=_change_pct(nikkei_r, mock.nikkei_change_pct),
+        # TOPIX: 1306.T ETF の騰落率を使い、指数値はモック値をそのまま表示
+        # （ETF の price 自体は TOPIX の指数値と異なるため price は mock を使用）
+        topix=mock.topix,
+        topix_change_pct=_change_pct(topix_r, mock.topix_change_pct),
+        tse_growth=tse_growth,
+        tse_growth_change_pct=tse_growth_change_pct,
+
+        # 為替
+        usdjpy=usdjpy_price,
+        usdjpy_change=usdjpy_change,
+
+        # 米国株
+        sp500=_price(sp500_r, mock.sp500),
+        sp500_change_pct=_change_pct(sp500_r, mock.sp500_change_pct),
+        nasdaq=_price(nasdaq_r, mock.nasdaq),
+        nasdaq_change_pct=_change_pct(nasdaq_r, mock.nasdaq_change_pct),
+        sox=sox_price,
+        sox_change_pct=sox_change_pct,
+
+        # 金利（すべて mock フォールバック）
+        us_2y_yield=us_2y_yield,
+        us_10y_yield=us_10y_yield,
+        jp_10y_yield=jp_10y_yield,
+
+        # コモディティ
+        wti_crude=_price(wti_r, mock.wti_crude),
+        wti_change_pct=_change_pct(wti_r, mock.wti_change_pct),
+        gold=_price(gold_r, mock.gold),
+        gold_change_pct=_change_pct(gold_r, mock.gold_change_pct),
+
+        # ボラティリティ
+        vix=_price(vix_r, mock.vix),
+
+        # 追加データ（yfinance では取得困難のため mock）
+        turnover_trillion_yen=mock.turnover_trillion_yen,
+        advance_decline_ratio=mock.advance_decline_ratio,
+    )
+
+
+# ============================================================
+# 内部ヘルパー: 1銘柄を安全に取得する
+# ============================================================
+
+def _fetch_ticker(symbol: str, label: str) -> Optional[dict]:
+    """
+    1銘柄を yfinance で取得し、以下を返す:
+        {
+            "symbol"     : str,   # ティッカーシンボル
+            "price"      : float, # 最新終値
+            "prev_close" : float, # 前日終値
+            "change_pct" : float, # 前日比 (%)
+        }
+
+    データが空・取得失敗の場合は None を返す（呼び出し元が fallback を担う）。
+    """
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+
+        # 直近5日分の履歴を取得（市場が閉まっている日があっても2日分確保できるよう余裕を持つ）
+        hist = ticker.history(period="5d")
+
+        if hist is None or hist.empty:
+            print(f"  [警告] {label} ({symbol}): データが空です → mock にフォールバック")
+            return None
+
+        # 終値列が存在するか確認
+        if "Close" not in hist.columns:
+            print(f"  [警告] {label} ({symbol}): Close 列が見つかりません → mock にフォールバック")
+            return None
+
+        # 有効な終値が2件以上あることを確認
+        close_series = hist["Close"].dropna()
+        if len(close_series) < 2:
+            print(f"  [警告] {label} ({symbol}): 終値データが1件以下 → mock にフォールバック")
+            return None
+
+        price      = float(close_series.iloc[-1])
+        prev_close = float(close_series.iloc[-2])
+
+        if prev_close == 0:
+            print(f"  [警告] {label} ({symbol}): 前日終値が0 → change_pct を 0.0 にします")
+            change_pct = 0.0
+        else:
+            change_pct = round((price - prev_close) / prev_close * 100, 4)
+
+        print(f"  [OK]   {label} ({symbol}): {price:,.2f}  ({change_pct:+.2f}%)")
+
+        return {
+            "symbol"     : symbol,
+            "price"      : round(price, 4),
+            "prev_close" : round(prev_close, 4),
+            "change_pct" : change_pct,
+        }
+
+    except Exception as e:
+        print(f"  [エラー] {label} ({symbol}): {e} → mock にフォールバック")
+        return None
+
+
+# ============================================================
+# 内部ヘルパー: 取得結果から値を安全に取り出す
+# ============================================================
+
+def _price(result: Optional[dict], fallback: float) -> float:
+    """price を返す。result が None なら fallback を使う。"""
+    if result is None:
+        return fallback
+    return result["price"]
+
+
+def _prev_close(result: Optional[dict], fallback: float) -> float:
+    """prev_close を返す。result が None なら fallback を使う。"""
+    if result is None:
+        return fallback
+    return result["prev_close"]
+
+
+def _change_pct(result: Optional[dict], fallback: float) -> float:
+    """change_pct を返す。result が None なら fallback を使う。"""
+    if result is None:
+        return fallback
+    return result["change_pct"]
